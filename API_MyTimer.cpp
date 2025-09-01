@@ -17,7 +17,7 @@ void API_MyTimer::upd_time() {
 
 float API_MyTimer::get_minutes() {
   API_MyTimer::upd_time();  
-  return (__minutes+__seconds/60);
+  return (__minutes + __seconds/60.0f);
 }
 
 void API_MyTimer::restart() {

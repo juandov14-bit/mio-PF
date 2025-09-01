@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PF Frontend</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header>
+    <h1>PF Frontend</h1>
+    <p>Consulta la API del ESP32 vía /api/*</p>
+  </header>
+
+  <main>
+    <section>
+      <h2>Salud</h2>
+      <button id="btnHealth">Refrescar</button>
+      <pre id="health"></pre>
+    </section>
+
+    <section>
+      <h2>Sensores</h2>
+      <button id="btnSensors">Refrescar</button>
+      <pre id="sensors"></pre>
+    </section>
+
+    <section>
+      <h2>Mock</h2>
+      <button id="btnMock">Refrescar</button>
+      <pre id="mock"></pre>
+    </section>
+  </main>
+
+  <footer>
+    <small id="backendUrl"></small>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>
+

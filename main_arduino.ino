@@ -12,6 +12,7 @@
 #include "API_Sensors.h"
 #include "API_MyTimer.h"
 #include "API_Control_PID.h"
+#include "API_HttpServer.h"
 
 
 API_Resistor      Qin;
@@ -109,9 +110,13 @@ void setup() {
   init_cooler(); // start cooler  100 %
   Qin.set_pwm(0); // power OFF resistor 0%
   PID.configure(PID_data);  // configura el control  
+  // Inicia API HTTP en modo AP con endpoints
+  httpServerSetup();
   }
   
 void loop() { 
+  // Atiende peticiones HTTP constantemente
+  httpServerLoop();
   Serial.println("LLU"); 
   switch (estadoActual) {
     
