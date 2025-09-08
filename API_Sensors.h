@@ -22,7 +22,8 @@ private:
     DeviceAddress __tempDeviceAddress;
     int __numberOfDevices;
     
-    float __temperature_data[4];
+    // 5 sensores: 1 ambiente + 4 de la barra
+    float __temperature_data[DEVICES_CONNECT];
 
 
     void printAddress(DeviceAddress deviceAddress);    

@@ -1,10 +1,9 @@
-version: "3.8"
 services:
   backend:
     build:
       context: .
       dockerfile: docker/backend/Dockerfile
-    image: pf-backend-mock:latest
+    image: pf-mock-backend:latest
     ports:
       - "3000:3000"
     restart: unless-stopped
@@ -15,8 +14,8 @@ services:
       dockerfile: docker/frontend/Dockerfile
     image: pf-frontend:latest
     environment:
-      # Por ahora apuntamos al backend mock en la red del compose
-      - BACKEND_URL=http://backend:3000
+      # Apunta al mock backend interno del compose
+      - BACKEND_URL=${BACKEND_URL:-http://backend:3000}
     ports:
       - "8080:80"
     depends_on:
