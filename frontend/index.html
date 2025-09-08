@@ -8,27 +8,68 @@
 </head>
 <body>
   <header>
-    <h1>PF Frontend</h1>
+    <div class="header-row">
+      <h1>PF Frontend</h1>
+      <div class="status">
+        <span class="lamp" id="lamp"></span>
+        <span class="label">Estado API</span>
+      </div>
+    </div>
     <p>Consulta la API del ESP32 vía /api/*</p>
   </header>
 
   <main>
-    <section>
-      <h2>Salud</h2>
-      <button id="btnHealth">Refrescar</button>
-      <pre id="health"></pre>
+    <section class="sec-config">
+      <h2>Configuración</h2>
+      <div class="grid">
+        <label>
+          Modo
+          <select id="mode">
+            <option value="pid">Control de temperatura (PID)</option>
+            <option value="onoff">Control ON/OFF</option>
+            <option value="manual">Modo manual (prueba)</option>
+          </select>
+        </label>
+
+        <label class="pid-only">
+          Nodo (0-3)
+          <input id="node" type="number" min="0" max="3" value="0" />
+        </label>
+
+        <label class="pid-only">
+          Temperatura objetivo (°C)
+          <input id="targetTemp" type="number" step="0.1" min="10" max="80" value="30" />
+        </label>
+
+        <label>
+          Velocidad cooler (0-3)
+          <input id="coolerSpeed" type="number" min="0" max="3" value="1" />
+        </label>
+
+        <label class="manual-only">
+          PWM resistencia (%)
+          <input id="pwmPercent" type="number" min="0" max="100" value="0" />
+        </label>
+      </div>
+      <div class="actions">
+        <button id="applyConfig">Aplicar configuración</button>
+        <pre id="configResult"></pre>
+      </div>
+    </section>
+    <section class="sec-chart">
+      <h2>Tiempo real</h2>
+      <canvas id="chart" width="1400" height="420"></canvas>
+      <div class="legend" id="legend"></div>
+      <div class="live-controls">
+        <label><input type="checkbox" id="autorefresh" checked> Auto-refresh</label>
+        <label>Periodo (ms) <input type="number" id="period" value="1000" min="200" step="100"></label>
+      </div>
     </section>
 
-    <section>
+    <section class="sec-sensors">
       <h2>Sensores</h2>
       <button id="btnSensors">Refrescar</button>
       <pre id="sensors"></pre>
-    </section>
-
-    <section>
-      <h2>Mock</h2>
-      <button id="btnMock">Refrescar</button>
-      <pre id="mock"></pre>
     </section>
   </main>
 
@@ -39,4 +80,3 @@
   <script src="/app.js"></script>
 </body>
 </html>
-

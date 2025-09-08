@@ -1,8 +1,14 @@
 :root{ --bg:#0b1321; --fg:#e8eef5; --muted:#a9b6c6; --accent:#67d5b5; }
 *{ box-sizing:border-box; }
 html,body{ height:100%; margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+body{ display:grid; grid-template-rows:auto 1fr auto; min-height:100vh; }
 header{ padding:16px; border-bottom:1px solid #1e2a3f; }
-main{ display:grid; gap:16px; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); padding:16px; }
+.header-row{ display:flex; align-items:center; justify-content:space-between; }
+.status{ display:flex; align-items:center; gap:8px; }
+.lamp{ width:14px; height:14px; border-radius:50%; display:inline-block; background:#5b6575; box-shadow:0 0 0 2px #1e2a3f inset; }
+.lamp.on{ background:#4ade80; box-shadow:0 0 8px 2px rgba(74,222,128,.6); }
+.label{ color:#a9b6c6; font-size:13px; }
+main{ display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); padding:10px; align-items:start; overflow:auto; }
 section{ padding:12px; border:1px solid #1e2a3f; border-radius:8px; background:#121b2e; }
 h1,h2{ margin:0 0 8px 0; }
 button{ background:var(--accent); color:#0b1321; border:none; border-radius:6px; padding:8px 12px; font-weight:600; cursor:pointer; }
@@ -10,3 +16,42 @@ button:hover{ filter:brightness(1.05); }
 pre{ margin-top:8px; background:#0b1321; color:var(--muted); padding:8px; border-radius:6px; min-height:80px; overflow:auto; }
 footer{ padding:8px 16px; border-top:1px solid #1e2a3f; color:var(--muted); }
 
+label{ display:flex; flex-direction:column; gap:6px; font-size:14px; }
+input, select{ padding:8px; border-radius:6px; border:1px solid #22314b; background:#0b1321; color:var(--fg); }
+.grid{ display:grid; gap:12px; grid-template-columns: repeat(auto-fit,minmax(200px,1fr)); }
+.actions{ margin-top:10px; display:flex; flex-direction:column; gap:8px; }
+.hidden{ display:none; }
+.legend{ margin-top:8px; display:flex; flex-wrap:wrap; gap:8px; font-size:13px; color:var(--muted); }
+.legend .key{ display:inline-flex; align-items:center; gap:6px; padding:2px 6px; border-radius:4px; background:#0b1321; }
+.legend .swatch{ width:10px; height:10px; display:inline-block; border-radius:2px; }
+.live-controls{ display:flex; gap:12px; align-items:center; margin-top:8px; font-size:14px; }
+/* Chart section and canvas sizing (smaller, prevents overlap) */
+.sec-chart{ display:flex; flex-direction:column; gap:8px; }
+/* Keep a reasonable aspect ratio; avoid stretching to entire column height */
+canvas#chart{
+  width:100%;
+  height:auto;
+  aspect-ratio: 16 / 6; /* wider than tall */
+  max-height: 380px;    /* cap size on large screens */
+  min-height: 220px;    /* readable on small screens */
+  background:#0b1321; border:1px solid #1e2a3f; border-radius:6px; box-shadow:0 0 0 1px #0f182a inset;
+}
+.legend{ font-size:13px; }
+.wide{ grid-column: 1 / -1; }
+.sec-sensors, .sec-config{ overflow:auto; }
+
+/* Distribución fija, con gráfico más compacto para evitar solapamientos */
+@media (min-width: 1200px){
+  /* Gráfico ocupa todo el ancho arriba; abajo config + sensores */
+  /* Reducimos la altura mínima del área del gráfico */
+  main{ grid-template-columns: 2.2fr 0.8fr; grid-template-rows: minmax(52vh, auto) auto; grid-template-areas:
+    'chart chart'
+    'config sensors';
+  }
+  .sec-chart{ grid-area: chart; }
+  .sec-sensors{ grid-area: sensors; }
+  .sec-config{ grid-area: config; }
+}
+
+/* Fullscreen chart mode */
+/* (Se eliminó el modo fullscreen explícito a pedido del usuario) */
