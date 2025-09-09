@@ -55,20 +55,14 @@ PID_config PID_data = {0,0,PID_REF,PID_KP,PID_KI,PID_TS,1,0,PID_U_MAX,0};
 File dataFile; // Objeto para el archivo de datos
 String dataBuffer = ""; // Búfer para almacenar datos antes de escribir al archivo
 
-enum Estado {
-  coolerLevel,
-  modoSeleccion,
-  modoFijoResistencia,
-  nodoSelect,
-  tempConfig,
-  runFijo,
-  runPID
-  };
-
-Estado estadoActual = coolerLevel; // Estado inicial: modoSeleccion
-int nodoSeleccionado = 0; // Nodo seleccionado inicialmente
-int porcentajeResistencia = 0; // Porcentaje de PWM de la resistencia
-int porcentajeCooler = 0; // Porcentaje de potencia del cooler
+// Estado de control expuesto a la API
+enum ControlMode { MODE_FIJO = 0, MODE_PID = 1 };
+volatile bool  g_running = false;
+volatile int   g_mode = MODE_FIJO;
+volatile int   g_selectedNode = 1;   // 1..4
+volatile float g_setpoint = PID_REF; // °C
+volatile int   g_fixedPercent = 0;   // 0..100
+volatile int   g_coolerPercent = 100; // 0..100
   
 void init_cooler(){
   ledcSetup(COOLER_CHANNEL, COOLER_FREQ, COOLER_RESOLUTION);
@@ -108,145 +102,48 @@ int Q_data = 200;
 void setup() {
   // start serial port
   Serial.begin(115200);
-  Serial.println("LU");    
+  Serial.println("[BOOT] Setup start");
+  // Inicializa sensores ahora que Serial está listo
+  Temperature.init(true);
+  Serial.println("[BOOT] Sensors init done");
   init_cooler(); // start cooler  100 %
+  set_cooler_pwm(g_coolerPercent);
   Qin.set_pwm(0); // power OFF resistor 0%
   PID.configure(PID_data);  // configura el control  
   // Inicia API HTTP en modo AP con endpoints
   httpServerSetup();
+  Serial.println("[BOOT] HTTP server ready");
   }
   
-void loop() { 
-  // Atiende peticiones HTTP constantemente
+void loop() {
+  // Servicio HTTP
   httpServerLoop();
-  Serial.println("LLU"); 
-  switch (estadoActual) {
-    
-    case coolerLevel:
-      // Esperar la entrada del usuario y configurar el porcentaje de potencia del cooler
-      for (int i = 0; i < 50; i++) {  // Limpia la pantalla
-        Serial.println();
-      }
-      Serial.println("elija la velocidad del cooler:(0-3)");
-      while(!exec_option());
-      if (Serial.available()) {
-        String userInput = Serial.readStringUntil('\n');
-        int value = userInput.toInt();
-        if (value >= 0 && value < 4) {
-          int velocidadCooler = value;
-          Serial.println("Velocidad del cooler configurada: Nivel" + String(velocidadCooler) + "de Velocidad");
-          exec_square_cooler(velocidadCooler);
-          estadoActual = modoSeleccion; // Cambiar al estado de eleccion de modo
-        } else {
-          Serial.println("Valor inválido. Intente de nuevo.");
-        }
-      }
-      break;
 
-    case modoSeleccion:
-      Serial.println("Seleccione el modo de operación:");
-      Serial.println("1. Modo Fijo");
-      Serial.println("2. Modo PID");
-      // Esperar la selección del usuario entre modo fijo y modo PID
-      while(!exec_option());
-      if (Serial.available()) {
-        String userInput = Serial.readStringUntil('\n');
-        if (userInput.equals("1")) {
-          estadoActual = modoFijoResistencia;
-          Serial.println("Modo Fijo - Configuración:");
-          Serial.println("Ingrese el porcentaje de PWM de la resistencia (0-100):");
-        } else if (userInput.equals("2")) {
-          estadoActual = nodoSelect;            //al estado seleccion de nodo
-          Serial.println("Modo PID - Configuración:");
-          Serial.println("Ingrese el nodo de acción (1-4):");
-        } else {
-          Serial.println("Selección inválida. Intente de nuevo.");
-        }
-      }
-      break;
+  // Aplicar PWM del cooler (según API)
+  set_cooler_pwm(g_coolerPercent);
 
-    case modoFijoResistencia:
-      // Esperar la entrada del usuario y configurar el porcentaje de PWM de la resistencia
-      if (Serial.available()) {
-        String userInput = Serial.readStringUntil('\n');
-        int value = userInput.toInt();
-        if (value >= 0 && value <= 100) {
-          porcentajeResistencia = value;
-          Serial.println("PWM de la resistencia configurado: " + String(porcentajeResistencia) + "%");
-          estadoActual = runFijo;   // correr con valores fijos
-          } else {
-          Serial.println("Valor inválido. Intente de nuevo.");
-        }
-      }
-      break;
-
-    
-    case nodoSelect:
-       if (Serial.available()) {
-        String userInput = Serial.readStringUntil('\n');
-        selectedNode = userInput.toInt();
-        // Solo permitir nodos de la barra (1..4). 0 es el sensor ambiente.
-        if (selectedNode >= 1 && selectedNode <= 4) {
-          // Configurar el nodo seleccionado
-          nodoSeleccionado = selectedNode;
-          Serial.println("Nodo seleccionado: " + String(nodoSeleccionado));
-          estadoActual = tempConfig; // Cambiar al estado de seleccion de temperatura
-        } else {
-          Serial.println("Selección inválida. Intente de nuevo.");
-        }
+  // Control no bloqueante
+  static float lastConfiguredSetpoint = PID_REF;
+  if (g_running) {
+    if (g_mode == MODE_PID && fabs(g_setpoint - lastConfiguredSetpoint) > 1e-6) {
+      PID_data.y_ref = g_setpoint;
+      PID.configure(PID_data);
+      lastConfiguredSetpoint = g_setpoint;
+      Serial.println(String("[RUN] Setpoint actualizado a ") + String(g_setpoint, 1));
     }
-    break;
 
-    case tempConfig:
-      Serial.println("Ingrese la temperatura deseada:");
-      // Esperar la entrada del usuario y configurar la temperatura deseada
-      while(!exec_option());
-      if (Serial.available()) {
-        String userInput = Serial.readStringUntil('\n');
-        float desiredTemp = userInput.toFloat();
-        if (desiredTemp >= 18 && desiredTemp <= 40) {
-          // Configurar la temperatura deseada
-          float temperaturaConfigurada = desiredTemp;
-          Serial.println("Temperatura configurada: " + String(temperaturaConfigurada));
-          estadoActual = runPID;    //correr con PiD
-        } else {
-          Serial.println("Temperatura inválida. Intente de nuevo.");
-        }
-      }
-      
-      break;
+    float y = Temperature.getTemperatureId(g_selectedNode);
+    float u_percent = 0.0f;
+    if (g_mode == MODE_PID) {
+      float u = PID.update(y);
+      u_percent = 43.1034f * u;
+    } else {
+      u_percent = g_fixedPercent;
+    }
+    if (u_percent < 0) u_percent = 0; if (u_percent > 100) u_percent = 100;
+    Qin.set_pwm((int)u_percent);
 
-    case runPID:// wait until "RUN"
-      Serial.println("Espera por 'RUN' para comenzar");
-      while( !exec_run() );
-      MyTimer.restart();
-      
-      //corriendo hasta "stop"
-      while(!exec_stop()){
-        send_data();
-        //exec_square(1);
-        //exec_square_random();    
-        Qin.set_pwm(43.1034*PID.update( Temperature.getTemperatureId(selectedNode) ));      
-        //exec_square_cooler(10);
-      }
-      estadoActual = coolerLevel; // Cambiar al estado de selección de velocidad de cooler
-      break;
-    
-    case runFijo:// wait until "RUN"
-      Serial.println("Espera por 'RUN' para comenzar");
-      while( !exec_run() );
-      MyTimer.restart();
-      
-      //corriendo hasta "stop"
-      while(!exec_stop()){
-        send_data();
-        //exec_square(1);
-        //exec_square_random();    
-        Qin.set_pwm(porcentajeResistencia);      
-        //exec_square_cooler(10);
-      }
-      estadoActual = coolerLevel; // Cambiar al estado de selección de velocidad de cooler
-      break;
+    send_data();
   }
 }
 
@@ -273,32 +170,7 @@ bool configure_Q(){
 }
 
 
-bool exec_run(){
-  if(Serial.available()) {
-    String string_data = Serial.readStringUntil('\n');
-    if (string_data.equals("RUN")) return true;
-  }
-  return false;
-}
-
-bool exec_option(){
-  if(Serial.available()) {
-    return true;
-  }
-  return false;
-}
-  
-
-bool exec_stop(){
-  if(Serial.available()) {
-    String string_data = Serial.readStringUntil('\n');
-    if (string_data.equals("STOP")) {              
-      Qin.set_pwm(0); // power OFF resistor 0%
-      return true;
-    } 
-  }
-  return false;
-}
+// Entradas por Serial eliminadas: control por API
 
 
 bool exec_square(float Ts_minutes){
@@ -329,14 +201,19 @@ void send_data(){
     
     // Test Sensors
     Temperature.getTemperatures(temp_nodos);
-    Serial.print(temp_nodos[Tnode1]); Serial.print(" ");
-    Serial.print(temp_nodos[Tnode2]); Serial.print(" ");
-    Serial.print(temp_nodos[Tnode3]); Serial.print(" ");
-    Serial.print(temp_nodos[Tnode4]); Serial.print(" ");
-    
-    // Test Resistor: measurement heat
-    Serial.print(Qin.get_heat());     Serial.print(" ");
-    Serial.println(temp_nodos[Troom]);
+    float heatW = Qin.get_heat();
+    Serial.print("[DATA] N1="); Serial.print(temp_nodos[Tnode1],2);
+    Serial.print(" N2="); Serial.print(temp_nodos[Tnode2],2);
+    Serial.print(" N3="); Serial.print(temp_nodos[Tnode3],2);
+    Serial.print(" N4="); Serial.print(temp_nodos[Tnode4],2);
+    Serial.print(" Room="); Serial.print(temp_nodos[Troom],2);
+    Serial.print(" HeatW="); Serial.print(heatW,3);
+    Serial.print(" Mode="); Serial.print(g_mode==0?"fixed":"pid");
+    Serial.print(" Run="); Serial.print(g_running?"1":"0");
+    Serial.print(" Node="); Serial.print(g_selectedNode);
+    Serial.print(" SP="); Serial.print(g_setpoint,1);
+    Serial.print(" Fix%="); Serial.print(g_fixedPercent);
+    Serial.print(" Cool%="); Serial.println(g_coolerPercent);
   }          
 
 }

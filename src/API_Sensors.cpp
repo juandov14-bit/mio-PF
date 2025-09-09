@@ -5,9 +5,7 @@ API_Sensors::API_Sensors() {
     __oneWire = new OneWire(ONE_WIRE_BUS);
     __sensors = new DallasTemperature(__oneWire);
     DeviceAddress __tempDeviceAddress;
-    
-    // init object
-    API_Sensors::init();
+    // Diferir init hasta después de Serial.begin() en setup()
 }
 
 void API_Sensors::init(bool print_init){
@@ -17,11 +15,12 @@ void API_Sensors::init(bool print_init){
   // Grab a count of devices on the wire
   __numberOfDevices = __sensors->getDeviceCount();
 
-  // Restart if N°device fail
+  // Si el conteo no coincide, informar pero no reiniciar aquí
   if(__numberOfDevices!=DEVICES_CONNECT){
-    Serial.print("Error in locating devices...");
-    delay(5000);
-    ESP.restart();
+    Serial.print("[Sensors] Discrepancia de cantidad. Esperados: ");
+    Serial.print(DEVICES_CONNECT);
+    Serial.print(" detectados: ");
+    Serial.println(__numberOfDevices);
   }
   
   if(print_init){
@@ -79,4 +78,3 @@ void API_Sensors::printAddress(DeviceAddress deviceAddress) {
     Serial.print(deviceAddress[i], HEX);
   }
 }
-
