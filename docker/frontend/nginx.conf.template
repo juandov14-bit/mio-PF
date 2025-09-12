@@ -8,6 +8,7 @@ server {
 
   location / {
     try_files $uri $uri/ /index.html;
+    add_header Cache-Control "no-store" always;
   }
 
   # Proxy API to the ESP32 backend
@@ -19,4 +20,3 @@ server {
     proxy_http_version 1.1;
   }
 }
-

@@ -1,7 +1,18 @@
-async function fetchJSON(path) {
-  const res = await fetch(path);
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json();
+async function fetchJSON(path, opts) {
+  const res = await fetch(path, opts);
+  const ct = (res.headers.get('content-type') || '').toLowerCase();
+  let body;
+  try {
+    if (ct.includes('application/json')) body = await res.json();
+    else body = await res.text();
+  } catch (e) {
+    // Evita fallar por 204 o cuerpos vacíos; devuelve texto crudo
+    body = '';
+  }
+  if (!res.ok) throw new Error(typeof body === 'string' && body ? body : `${res.status} ${res.statusText}`);
+  // Si vino texto, devuelve un objeto informativo
+  if (typeof body === 'string') return { ok: true, raw: body };
+  return body;
 }
 
 function setPre(id, data) {
@@ -31,20 +42,20 @@ document.getElementById('btnSensors').addEventListener('click', async () => {
 });
 
 // Show effective backend (filled by nginx proxy to /api/*)
-document.getElementById('backendUrl').textContent = 'API: proxied by Nginx at /api/*';
+document.getElementById('backendUrl').textContent = 'API: /api/* (IP del ESP32)';
 
 // --- Config form logic ---
 const modeEl = document.getElementById('mode');
 const nodeEl = document.getElementById('node');
 const targetTempEl = document.getElementById('targetTemp');
-const coolerSpeedEl = document.getElementById('coolerSpeed');
+const coolerPercentEl = document.getElementById('coolerPercent');
 const pwmPercentEl = document.getElementById('pwmPercent');
 
 function updateModeVisibility() {
   const mode = modeEl.value;
-  const showPidLike = (mode === 'pid' || mode === 'onoff');
-  document.querySelectorAll('.pid-only').forEach(el => el.classList.toggle('hidden', !showPidLike));
-  document.querySelectorAll('.manual-only').forEach(el => el.classList.toggle('hidden', mode !== 'manual'));
+  const showPid = (mode === 'pid');
+  document.querySelectorAll('.pid-only').forEach(el => el.classList.toggle('hidden', !showPid));
+  document.querySelectorAll('.fixed-only').forEach(el => el.classList.toggle('hidden', mode !== 'fixed'));
 }
 
 modeEl.addEventListener('change', updateModeVisibility);
@@ -52,37 +63,35 @@ updateModeVisibility();
 
 document.getElementById('applyConfig').addEventListener('click', async () => {
   const mode = modeEl.value;
-  const coolerSpeed = Number(coolerSpeedEl.value);
+  const cooler = Number(coolerPercentEl.value);
+  const actions = [];
   try {
-    let resp;
+    actions.push(fetchJSON(`/api/cooler?percent=${cooler}`, { method: 'POST' }));
     if (mode === 'pid') {
       const node = Number(nodeEl.value);
       const targetTemp = Number(targetTempEl.value);
-      resp = await fetch('/api/config/control', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode, node, targetTemp, coolerSpeed })
-      }).then(r => r.json());
-    } else if (mode === 'onoff') {
-      const node = Number(nodeEl.value);
-      const targetTemp = Number(targetTempEl.value);
-      resp = await fetch('/api/config/onoff', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode, node, targetTemp, coolerSpeed })
-      }).then(r => r.json());
+      actions.push(fetchJSON(`/api/mode?type=pid`, { method: 'POST' }));
+      actions.push(fetchJSON(`/api/node?index=${node}`, { method: 'POST' }));
+      actions.push(fetchJSON(`/api/setpoint?temp=${targetTemp.toFixed(1)}`, { method: 'POST' }));
     } else {
       const pwmPercent = Number(pwmPercentEl.value);
-      resp = await fetch('/api/config/manual', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode, pwmPercent, coolerSpeed })
-      }).then(r => r.json());
+      actions.push(fetchJSON(`/api/mode?type=fixed`, { method: 'POST' }));
+      actions.push(fetchJSON(`/api/fixed?percent=${pwmPercent}`, { method: 'POST' }));
     }
-    setPre('configResult', resp);
+    const results = await Promise.all(actions);
+    setPre('configResult', { ok: true, results });
   } catch (e) {
     setPre('configResult', { error: String(e) });
   }
+});
+
+document.getElementById('btnRun').addEventListener('click', async () => {
+  try { setPre('configResult', await fetchJSON('/api/run', { method: 'POST' })); }
+  catch (e) { setPre('configResult', { error: String(e) }); }
+});
+document.getElementById('btnStop').addEventListener('click', async () => {
+  try { setPre('configResult', await fetchJSON('/api/stop', { method: 'POST' })); }
+  catch (e) { setPre('configResult', { error: String(e) }); }
 });
 
 // --- Simple realtime chart ---
@@ -196,12 +205,27 @@ function drawChart() {
 
 async function pollSensorsOnce() {
   try {
-    const s = await fetchJSON('/api/sensors');
-    history.push({ t: Date.now(), temps: s.temperatures || [], ambient: s.ambient, control_pct: s.control_pct });
+    const s = await fetchJSON('/api/state');
+    const temps = s.temperatures ? s.temperatures.nodes : [];
+    const ambient = s.temperatures ? s.temperatures.room : undefined;
+    const control_pct = typeof s.control_pct === 'number' ? s.control_pct : (s.mode === 'pid' ? undefined : s.fixed_percent);
+    // Actualiza panel de sensores (texto) además del gráfico
+    setPre('sensors', {
+      running: s.running,
+      mode: s.mode,
+      node: s.node,
+      setpoint: s.setpoint,
+      cooler_percent: s.cooler_percent,
+      fixed_percent: s.fixed_percent,
+      room: ambient,
+      nodes: temps,
+      control_pct
+    });
+    history.push({ t: Date.now(), temps, ambient, control_pct });
     if (history.length > MAX_POINTS) history.shift();
     drawChart();
   } catch (e) {
-    console.error('Error al consultar /api/sensors:', e);
+    console.error('Error al consultar /api/state:', e);
   }
 }
 

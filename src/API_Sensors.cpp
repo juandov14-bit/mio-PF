@@ -52,17 +52,25 @@ void API_Sensors::init(bool print_init){
 
 void API_Sensors::getTemperatures(float write_data[DEVICES_CONNECT]){
   float tempC;
+  Serial.println("[Sensors] getTemperatures() called");
   __sensors->requestTemperatures(); // Send the command to get temperatures
 
-    // Loop through each device, print out temperature data
-    for (int i = 0; i < DEVICES_CONNECT; i++) {
-      // Search the wire for address
-      if (__sensors->getAddress(__tempDeviceAddress, i)) {
-        tempC = __sensors->getTempC(__tempDeviceAddress);
-        if (tempC>5) { __temperature_data[i] = tempC; }
-        write_data[i] = __temperature_data[i];      
-      }
+  // Loop through each device, print out temperature data
+  for (int i = 0; i < DEVICES_CONNECT; i++) {
+    // Search the wire for address
+    if (__sensors->getAddress(__tempDeviceAddress, i)) {
+      tempC = __sensors->getTempC(__tempDeviceAddress);
+      Serial.print("[Sensors] idx "); Serial.print(i);
+      Serial.print(" addr="); API_Sensors::printAddress(__tempDeviceAddress);
+      Serial.print(" temp="); Serial.println(tempC);
+      if (tempC>5) { __temperature_data[i] = tempC; }
+    } else {
+      Serial.print("[Sensors] idx "); Serial.print(i);
+      Serial.println(" no address detected");
     }
+    // Always reflect current cached value to output buffer
+    write_data[i] = __temperature_data[i];
+  }
 }
 
 float API_Sensors::getTemperatureId(uint8_t id_sensor) {

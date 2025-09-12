@@ -15,9 +15,22 @@ services:
     image: pf-frontend:latest
     environment:
       # Apunta al mock backend interno del compose
-      - BACKEND_URL=${BACKEND_URL:-http://backend:3000}
+      - BACKEND_URL=${BACKEND_URL:-http://192.168.1.39}
     ports:
       - "8080:80"
-    depends_on:
-      - backend
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/dashboard/Dockerfile
+      args:
+        BACKEND_URL: ${BACKEND_URL:-http://192.168.1.39}
+        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://192.168.1.39}
+    image: pf-dashboard:latest
+    environment:
+      - BACKEND_URL=${BACKEND_URL:-http://192.168.1.39}
+      - NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE:-http://192.168.1.39}
+    ports:
+      - "3001:3000"
     restart: unless-stopped

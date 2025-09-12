@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PF Frontend</title>
+  <title>Panel de Control de Temperatura</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <header>
     <div class="header-row">
-      <h1>PF Frontend</h1>
+      <h1>Panel de Control de Temperatura</h1>
       <div class="status">
         <span class="lamp" id="lamp"></span>
         <span class="label">Estado API</span>
@@ -23,17 +23,16 @@
       <h2>Configuración</h2>
       <div class="grid">
         <label>
-          Modo
+          Modo de control
           <select id="mode">
-            <option value="pid">Control de temperatura (PID)</option>
-            <option value="onoff">Control ON/OFF</option>
-            <option value="manual">Modo manual (prueba)</option>
+            <option value="pid">PID (temperatura objetivo)</option>
+            <option value="fixed">Fijo (% resistencia)</option>
           </select>
         </label>
 
         <label class="pid-only">
-          Nodo (0-3)
-          <input id="node" type="number" min="0" max="3" value="0" />
+          Nodo de control (1-4)
+          <input id="node" type="number" min="1" max="4" value="1" />
         </label>
 
         <label class="pid-only">
@@ -42,17 +41,21 @@
         </label>
 
         <label>
-          Velocidad cooler (0-3)
-          <input id="coolerSpeed" type="number" min="0" max="3" value="1" />
+          Cooler (%)
+          <input id="coolerPercent" type="number" min="0" max="100" value="100" />
         </label>
 
-        <label class="manual-only">
+        <label class="fixed-only">
           PWM resistencia (%)
           <input id="pwmPercent" type="number" min="0" max="100" value="0" />
         </label>
       </div>
       <div class="actions">
-        <button id="applyConfig">Aplicar configuración</button>
+        <div style="display:flex; gap:8px; flex-wrap:wrap">
+          <button id="applyConfig">Aplicar configuración</button>
+          <button id="btnRun" style="background:#22c55e">RUN</button>
+          <button id="btnStop" style="background:#ef4444">STOP</button>
+        </div>
         <pre id="configResult"></pre>
       </div>
     </section>

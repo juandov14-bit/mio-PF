@@ -2,6 +2,7 @@
 
 #include <WiFi.h>
 #include <WebServer.h>
+#include <ctype.h>
 
 #include "API_Sensors.h"
 #include "API_Resistor.h"
@@ -36,6 +37,9 @@ extern volatile int   g_coolerPercent; // 0..100
 static WebServer server(80);
 
 static void sendJson(const String& body, int code = 200) {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
   server.send(code, "application/json", body);
 }
 
@@ -85,8 +89,65 @@ static void handleState() {
   json += "\"temperatures\":{\"room\":"; json += String(temps[0],2); json += ",\"nodes\":[";
   for (int i=1;i<=4;i++){ if(i>1) json+=","; json+=String(temps[i],2);} json += "]},";
   json += "\"heater_w\":"; json += String(Qin.get_heat(),3);
+  json += ",\"control_pct\":"; json += Qin.get_set_pwm_percent();
   json += "}";
   sendJson(json);
+}
+
+// --- Shims de compatibilidad para rutas antiguas (/api/config/*) ---
+static bool parseIntField(const String& src, const char* key, int& out) {
+  int pos = src.indexOf(String("\"") + key + "\""); if (pos < 0) return false;
+  pos = src.indexOf(':', pos); if (pos < 0) return false; pos++;
+  while (pos < (int)src.length() && isspace((unsigned char)src[pos])) pos++;
+  int sign = 1; if (pos < (int)src.length() && src[pos]=='-') { sign = -1; pos++; }
+  long val = 0; bool any=false; while (pos < (int)src.length() && isdigit((unsigned char)src[pos])) { val = val*10 + (src[pos]-'0'); pos++; any=true; }
+  if (!any) return false; out = (int)(sign*val); return true;
+}
+static bool parseFloatField(const String& src, const char* key, float& out) {
+  int pos = src.indexOf(String("\"") + key + "\""); if (pos < 0) return false;
+  pos = src.indexOf(':', pos); if (pos < 0) return false; pos++;
+  // Avanza hasta la próxima coma o cierre de objeto
+  int end = pos;
+  while (end < (int)src.length() && src[end] != ',' && src[end] != '}') end++;
+  String num = src.substring(pos, end);
+  num.trim();
+  out = num.toFloat();
+  return true;
+}
+static void handleConfigControl() {
+  String body = server.arg("plain");
+  int node = 1; float target = 30.0f; int coolerSpeed = 3;
+  parseIntField(body, "node", node);
+  parseFloatField(body, "targetTemp", target);
+  parseIntField(body, "coolerSpeed", coolerSpeed);
+  if (node < 1 || node > 4) node = 1;
+  int coolerPct = (coolerSpeed<=0?0: coolerSpeed==1?33: coolerSpeed==2?66: 100);
+  g_mode = 1; g_selectedNode = node; g_setpoint = target; g_coolerPercent = coolerPct;
+  Serial.printf("[Shim] control pid node=%d sp=%.1f cooler%%=%d\n", node, target, coolerPct);
+  sendJson("{\"ok\":true}");
+}
+static void handleConfigOnOff() {
+  String body = server.arg("plain");
+  int node = 1; float target = 30.0f; int coolerSpeed = 3;
+  parseIntField(body, "node", node);
+  parseFloatField(body, "targetTemp", target);
+  parseIntField(body, "coolerSpeed", coolerSpeed);
+  if (node < 1 || node > 4) node = 1;
+  int coolerPct = (coolerSpeed<=0?0: coolerSpeed==1?33: coolerSpeed==2?66: 100);
+  g_mode = 1; g_selectedNode = node; g_setpoint = target; g_coolerPercent = coolerPct;
+  Serial.printf("[Shim] onoff=>pid node=%d sp=%.1f cooler%%=%d\n", node, target, coolerPct);
+  sendJson("{\"ok\":true}");
+}
+static void handleConfigManual() {
+  String body = server.arg("plain");
+  int pwm = 0; int coolerSpeed = 3;
+  parseIntField(body, "pwmPercent", pwm);
+  parseIntField(body, "coolerSpeed", coolerSpeed);
+  if (pwm<0) pwm=0; if (pwm>100) pwm=100;
+  int coolerPct = (coolerSpeed<=0?0: coolerSpeed==1?33: coolerSpeed==2?66: 100);
+  g_mode = 0; g_fixedPercent = pwm; g_coolerPercent = coolerPct;
+  Serial.printf("[Shim] manual fixed%%=%d cooler%%=%d\n", pwm, coolerPct);
+  sendJson("{\"ok\":true}");
 }
 
 static bool startSTA(unsigned long timeout_ms = 15000) {
@@ -153,6 +214,24 @@ void httpServerSetup() {
   // Rutas API
   server.on("/api/health", HTTP_GET, handleHealth);
   server.on("/api/sensors", HTTP_GET, handleSensors);
+  // Compatibilidad con dashboard anterior
+  server.on("/api/config/control", HTTP_POST, handleConfigControl);
+  server.on("/api/config/onoff", HTTP_POST, handleConfigOnOff);
+  server.on("/api/config/manual", HTTP_POST, handleConfigManual);
+  // CORS preflight (OPTIONS)
+  server.on("/api/health", HTTP_OPTIONS, [](){ sendJson("{}", 204); });
+  server.on("/api/sensors", HTTP_OPTIONS, [](){ sendJson("{}", 204); });
+  server.on("/api/config/control", HTTP_OPTIONS, [](){ sendJson("{}", 204); });
+  server.on("/api/config/onoff", HTTP_OPTIONS, [](){ sendJson("{}", 204); });
+  server.on("/api/config/manual", HTTP_OPTIONS, [](){ sendJson("{}", 204); });
+  server.on("/api/state", HTTP_OPTIONS, [](){ sendJson("{}", 204); });
+  server.on("/api/run", HTTP_OPTIONS, [](){ sendJson("{}", 204); });
+  server.on("/api/stop", HTTP_OPTIONS, [](){ sendJson("{}", 204); });
+  server.on("/api/mode", HTTP_OPTIONS, [](){ sendJson("{}", 204); });
+  server.on("/api/node", HTTP_OPTIONS, [](){ sendJson("{}", 204); });
+  server.on("/api/setpoint", HTTP_OPTIONS, [](){ sendJson("{}", 204); });
+  server.on("/api/fixed", HTTP_OPTIONS, [](){ sendJson("{}", 204); });
+  server.on("/api/cooler", HTTP_OPTIONS, [](){ sendJson("{}", 204); });
   server.on("/api/state", HTTP_GET, handleState);
   server.on("/api/run", HTTP_POST, handleRunStart);
   server.on("/api/stop", HTTP_POST, handleRunStop);

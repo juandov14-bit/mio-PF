@@ -23,6 +23,7 @@ public:
     void init();
     void set_pwm(int percent);
     float get_heat();
+    int get_set_pwm_percent() { return __actual_set_pwm_percent; }
   
 private:
     int __pin_out;
